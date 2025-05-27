@@ -1,107 +1,64 @@
-<!DOCTYPE html>
+<<!DOCTYPE html>
 <html>
 <head>
-  <title>Singularity UI</title>
+  <title>Singularity AI Interface</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       margin: 2rem;
-      transition: background 0.2s, color 0.2s;
     }
     textarea {
       width: 100%;
+      padding: 10px;
+      font-size: 1rem;
+    }
+    button {
+      padding: 8px 16px;
+      margin-top: 10px;
+      cursor: pointer;
     }
     .entry {
-      margin-bottom: 1rem;
+      margin-top: 1.5rem;
       padding: 1rem;
-      background: #f5f5f5;
+      background: #f2f2f2;
       border-radius: 6px;
     }
-    .model {
-      font-weight: bold;
-      color: #444;
-    }
     .user {
-      margin-bottom: 0.3rem;
-      color: #222;
-    }
-    .response {
-      white-space: pre-wrap;
+      font-weight: bold;
       color: #333;
     }
-    button, select {
-      margin-right: 0.5rem;
+    .response {
+      margin-top: 6px;
+      white-space: pre-wrap;
+      color: #444;
     }
-    #loading {
-      color: #888;
-      margin-top: 1rem;
-    }
-    body.dark {
-      background: #121212;
-      color: #f0f0f0;
-    }
-    body.dark .entry {
-      background: #222;
-    }
-    body.dark .model,
-    body.dark .response,
-    body.dark .user {
-      color: #ddd;
+    #history {
+      margin-top: 2rem;
     }
   </style>
 </head>
 <body>
   <h2>Singularity AI Interface</h2>
 
-  <select id="modelSelect">
-    <option value="auto">Auto (Let the system decide)</option>
-    <option value="GPT-4o">Force GPT-4o</option>
-    <option value="DeepSeek">Force DeepSeek</option>
-    <option value="Mistral">Force Mistral</option>
-  </select>
-
-  <button onclick="toggleDarkMode()">Toggle Dark Mode</button><br><br>
-
-  <textarea id="prompt" rows="4" placeholder="Type your prompt here..."></textarea><br><br>
+  <textarea id="prompt" rows="4" placeholder="Type your prompt here..."></textarea><br>
   <button onclick="sendPrompt()">Send Prompt</button>
-  <button onclick="clearHistory()">Clear Chat</button>
-  <div id="loading"></div>
 
-  <div id="history" style="margin-top: 2rem;"></div>
+  <div id="history"></div>
 
   <script>
     const historyDiv = document.getElementById("history");
-    const loadingDiv = document.getElementById("loading");
-    const modelSelect = document.getElementById("modelSelect");
-
-    window.onload = () => {
-      try {
-        const saved = JSON.parse(localStorage.getItem("chat_history")) || [];
-        saved.forEach(entry => renderEntry(entry.prompt, entry.response, entry.model, entry.cost));
-        if (localStorage.getItem("theme") === "dark") {
-          document.body.classList.add("dark");
-        }
-      } catch (e) {
-        console.error("Failed to load chat history:", e);
-      }
-    };
-
-    document.getElementById("prompt").addEventListener("keydown", function (e) {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        sendPrompt();
-      }
-    });
 
     async function sendPrompt() {
-      const promptText = document.getElementById("prompt").value;
-      if (!promptText.trim()) return;
+      const promptText = document.getElementById("prompt").value.trim();
+      if (!promptText) return;
 
-      const forcedModel = modelSelect.value;
-      loadingDiv.textContent = "Thinking...";
+      const entry = document.createElement("div");
+      entry.className = "entry";
+      entry.innerHTML = `<div class="user">You:</div><div class="response">Loading...</div>`;
+      historyDiv.prepend(entry);
 
       try {
-        const res = await fetch("http://127.0.0.1:8000/prompt", {
+        const res = await fetch("https://singularity-backend-hbb1.onrender.com", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ prompt: promptText })
@@ -109,55 +66,15 @@
 
         const data = await res.json();
 
-        const finalModel = forcedModel !== "auto" ? forcedModel : data.model_used;
-        const cost = simulateCost(promptText, finalModel);
-
-        renderEntry(promptText, data.response, finalModel, cost);
-        saveEntry({ prompt: promptText, response: data.response, model: finalModel, cost });
-        document.getElementById("prompt").value = "";
+        entry.innerHTML = `
+          <div class="user">🧠 <strong>${data.model_used}</strong></div>
+          <div class="response"><strong>You:</strong> ${promptText}<br><strong>AI:</strong> ${data.response}</div>
+        `;
       } catch (err) {
-        renderEntry(promptText, "Error reaching AI", "ERROR", "$0.00");
-      } finally {
-        loadingDiv.textContent = "";
+        entry.querySelector(".response").textContent = "⚠️ Error reaching server.";
       }
-    }
 
-    function renderEntry(prompt, response, model, cost) {
-      const entry = document.createElement("div");
-      entry.className = "entry";
-      entry.innerHTML = `
-        <div class="user">🧠 <span class="model">${model}</span> – 💰 <span>$${cost}</span></div>
-        <div class="response"><strong>You:</strong> ${prompt}<br><strong>AI:</strong> ${response}</div>
-      `;
-      historyDiv.prepend(entry);
-    }
-
-    function saveEntry(entry) {
-      const saved = JSON.parse(localStorage.getItem("chat_history")) || [];
-      saved.push(entry);
-      localStorage.setItem("chat_history", JSON.stringify(saved));
-    }
-
-    function clearHistory() {
-      historyDiv.innerHTML = "";
-      localStorage.removeItem("chat_history");
-    }
-
-    function toggleDarkMode() {
-      document.body.classList.toggle("dark");
-      localStorage.setItem("theme", document.body.classList.contains("dark") ? "dark" : "light");
-    }
-
-    function simulateCost(prompt, model) {
-      const length = prompt.length;
-      let base = 0.002;
-
-      if (model === "GPT-4o") base = 0.015;
-      else if (model === "DeepSeek") base = 0.004;
-      else if (model === "Mistral") base = 0.002;
-
-      const cost = (length / 1000) * base;
-      return cost.toFixed(4);
+      document.getElementById("prompt").value = "";
     }
   </script>
 </body>
