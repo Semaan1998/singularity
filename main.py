@@ -14,6 +14,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ✅ Add root route for render health check and testing
+@app.get("/")
+def read_root():
+    return {"message": "Singularity backend is live."}
+
 # Define the expected request structure
 class PromptRequest(BaseModel):
     prompt: str
