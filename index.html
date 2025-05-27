@@ -58,7 +58,7 @@
       historyDiv.prepend(entry);
 
       try {
-        const res = await fetch("https://singularity-backend-hbb1.onrender.com", {
+        const res = await fetch("https://singularity-backend-xxxxx.onrender.com/prompt", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ prompt: promptText })
