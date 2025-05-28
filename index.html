@@ -1,49 +1,389 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Singularity UI</title>
+  <meta charset="UTF-8">
+  <title>Singularity AI Interface</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 2rem; }
-    textarea { width: 100%; }
-    .entry { margin-bottom: 1rem; padding: 1rem; background: #f5f5f5; border-radius: 6px; }
-    .user { font-weight: bold; color: #222; margin-bottom: 0.3rem; }
-    .response { white-space: pre-wrap; color: #333; }
+    :root {
+      --bg: #fafafa;
+      --text: #222;
+      --card: #fff;
+      --input: #eee;
+      --border: #ccc;
+      --shadow: rgba(0,0,0,0.05);
+    }
+
+    [data-theme='dark'] {
+      --bg: #1a1a1a;
+      --text: #eee;
+      --card: #2a2a2a;
+      --input: #333;
+      --border: #555;
+      --shadow: rgba(0,0,0,0.3);
+    }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 2rem;
+      background: var(--bg);
+      color: var(--text);
+      transition: background 0.3s, color 0.3s;
+    }
+
+    h2 {
+      font-size: 2rem;
+    }
+
+    textarea {
+      width: 100%;
+      padding: 0.75rem;
+      font-size: 1rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--input);
+      color: var(--text);
+    }
+
+    textarea:disabled {
+      opacity: 0.6;
+    }
+
+    .actions {
+      display: flex;
+      gap: 1rem;
+      margin-top: 0.5rem;
+      align-items: center;
+    }
+
+    button {
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      color: white;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    button.primary { background: #007bff; }
+    button.primary:hover:enabled { background: #0056b3; }
+
+    button.gray { background: #6c757d; }
+    button.gray:hover:enabled { background: #545b62; }
+
+    button.toggle {
+      float: right;
+      background: transparent;
+      color: var(--text);
+      font-size: 1.1rem;
+      border: 1px solid var(--border);
+    }
+
+    .entry {
+      margin-bottom: 1rem;
+      padding: 1rem;
+      background: var(--card);
+      border-radius: 8px;
+      box-shadow: 0 2px 5px var(--shadow);
+    }
+
+    .user {
+      font-weight: bold;
+    }
+
+    .response {
+      white-space: pre-wrap;
+      margin-top: 0.5rem;
+    }
+
+    #history {
+      margin-top: 2rem;
+      max-height: 60vh;
+      overflow-y: auto;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 1rem;
+      height: 1rem;
+      border: 2px solid rgba(0, 0, 0, 0.1);
+      border-top-color: #007bff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin-left: 0.5rem;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    #imageInput {
+      display: none;
+    }
+
+    #imagePreviewContainer {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 0.5rem;
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      padding: 0.5rem;
+      min-height: 120px;
+      transition: background 0.2s ease;
+    }
+
+    #imagePreviewContainer.dragover {
+      background: rgba(0, 123, 255, 0.05);
+    }
+
+    .image-wrapper {
+      position: relative;
+      width: 120px;
+      aspect-ratio: 1 / 1;
+      overflow: hidden;
+      border-radius: 6px;
+      box-shadow: 0 2px 5px var(--shadow);
+    }
+
+    .image-wrapper img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      border-radius: 6px;
+    }
+
+    .removeImageBtn {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 2rem;
+      height: 2rem;
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: transparent;
+      background: none;
+      border: none;
+      cursor: pointer;
+      transition: color 0.2s ease;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .image-wrapper:hover .removeImageBtn {
+      color: red;
+    }
+
+    img.inline-chat-image {
+      margin-top: 0.5rem;
+      max-width: 120px;
+      border-radius: 6px;
+      box-shadow: 0 2px 5px var(--shadow);
+    }
   </style>
 </head>
 <body>
-  <h2>Singularity AI Interface</h2>
-  <textarea id="prompt" rows="4" placeholder="Type your prompt here..."></textarea><br><br>
-  <button onclick="sendPrompt()">Send Prompt</button>
+  <h2>Singularity AI Interface 
+    <button class="toggle" onclick="toggleTheme()">🌙</button>
+  </h2>
 
-  <div id="history" style="margin-top: 2rem;"></div>
+  <textarea id="prompt" rows="4" placeholder="Type your prompt here... (Shift+Enter for newline)"></textarea>
+
+  <div id="imagePreviewContainer"
+       ondragover="handleDragOver(event)"
+       ondragleave="handleDragLeave(event)"
+       ondrop="handleDrop(event)">
+  </div>
+
+  <div class="actions">
+    <button id="sendBtn" class="primary" onclick="sendPrompt()">Send Prompt</button>
+    <button class="gray" onclick="triggerImageUpload()">Upload Image</button>
+  </div>
+
+  <input type="file" id="imageInput" accept="image/*" multiple>
+
+  <div id="history"></div>
 
   <script>
+    const promptBox = document.getElementById("prompt");
     const historyDiv = document.getElementById("history");
+    const sendBtn = document.getElementById("sendBtn");
+    const fileInput = document.getElementById("imageInput");
+    const imagePreviewContainer = document.getElementById("imagePreviewContainer");
+
+    let attachedImages = [];
+
+    function toggleTheme() {
+      const current = document.body.getAttribute("data-theme");
+      const next = current === "dark" ? "light" : "dark";
+      document.body.setAttribute("data-theme", next);
+      localStorage.setItem("theme", next);
+    }
+
+    document.body.setAttribute("data-theme", localStorage.getItem("theme") || "light");
+
+    function loadHistory() {
+      const saved = localStorage.getItem("chatHistory");
+      if (saved) historyDiv.innerHTML = saved;
+    }
+
+    function saveHistory() {
+      localStorage.setItem("chatHistory", historyDiv.innerHTML);
+    }
+
+    loadHistory();
+
+    function toggleInputs(disabled) {
+      promptBox.disabled = disabled;
+      sendBtn.disabled = disabled;
+    }
+
+    function isFollowUp(text) {
+      const triggers = ["continue", "elaborate", "go on", "more please", "what else"];
+      return triggers.some(trigger => text.toLowerCase().includes(trigger));
+    }
+
+    function triggerImageUpload() {
+      if (attachedImages.length >= 4) {
+        alert("Maximum of 4 images allowed.");
+        return;
+      }
+      fileInput.click();
+    }
+
+    function uploadImage(files) {
+      for (const file of files) {
+        if (attachedImages.length >= 4) break;
+
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          const dataUrl = e.target.result;
+          attachedImages.push({ file, dataUrl });
+          renderImagePreviews();
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+
+    function renderImagePreviews() {
+      imagePreviewContainer.innerHTML = "";
+
+      attachedImages.forEach((img, index) => {
+        const wrapper = document.createElement("div");
+        wrapper.className = "image-wrapper";
+
+        const image = document.createElement("img");
+        image.src = img.dataUrl;
+        image.title = `${img.file.name} (${Math.round(img.file.size / 1024)} KB)`;
+
+        const removeBtn = document.createElement("button");
+        removeBtn.className = "removeImageBtn";
+        removeBtn.innerText = "×";
+        removeBtn.onclick = () => {
+          attachedImages.splice(index, 1);
+          renderImagePreviews();
+        };
+
+        wrapper.appendChild(image);
+        wrapper.appendChild(removeBtn);
+        imagePreviewContainer.appendChild(wrapper);
+      });
+    }
+
+    function handleDragOver(event) {
+      event.preventDefault();
+      imagePreviewContainer.classList.add("dragover");
+    }
+
+    function handleDragLeave(event) {
+      event.preventDefault();
+      imagePreviewContainer.classList.remove("dragover");
+    }
+
+    function handleDrop(event) {
+      event.preventDefault();
+      imagePreviewContainer.classList.remove("dragover");
+      const files = Array.from(event.dataTransfer.files).filter(f => f.type.startsWith("image/"));
+      uploadImage(files);
+    }
 
     async function sendPrompt() {
-      const promptText = document.getElementById("prompt").value.trim();
-      if (!promptText) return;
+      let promptText = promptBox.value.trim();
+      if (!promptText && attachedImages.length === 0) return;
+
+      if (!promptText && attachedImages.length > 0) {
+        promptText = "What do you see in these images?";
+      }
+
+      toggleInputs(true);
 
       const entry = document.createElement("div");
       entry.className = "entry";
-      entry.innerHTML = `<div class="user"><strong>You:</strong> ${promptText}</div><div class="response">⏳ Loading...</div>`;
+
+      const imageHtml = attachedImages.map(img => `<img class="inline-chat-image" src="${img.dataUrl}">`).join("");
+      entry.innerHTML = `<div class="user"><strong>You:</strong> ${promptText}${imageHtml}</div><div class="response">⏳ Loading<span class="spinner"></span></div>`;
       historyDiv.prepend(entry);
 
       try {
-        const res = await fetch("https://singularity-backend-hbb1.onrender.com/prompt", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: promptText })
-        });
+        let res, data;
 
-        const data = await res.json();
-        entry.querySelector(".response").innerHTML = `<strong>AI:</strong> ${data.response}`;
+        if (attachedImages.length > 0) {
+          const formData = new FormData();
+          attachedImages.forEach((img, i) => {
+            formData.append("file" + i, img.file);
+          });
+          formData.append("prompt", promptText);
+
+          res = await fetch("http://localhost:8000/analyze-image/", {
+            method: "POST",
+            body: formData
+          });
+        } else {
+          const endpoint = isFollowUp(promptText) ? "continue" : "prompt";
+          const method = endpoint === "continue" ? "GET" : "POST";
+          const options = method === "POST"
+            ? { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: promptText }) }
+            : { method };
+
+          res = await fetch(`http://localhost:8000/${endpoint}`, options);
+        }
+
+        data = await res.json();
+
+        if (data.error) {
+          entry.querySelector(".response").innerHTML = `⚠️ ${data.error}`;
+        } else {
+          entry.querySelector(".response").innerHTML = `<strong>AI:</strong> ${data.response}`;
+          saveHistory();
+        }
+
       } catch (err) {
-        entry.querySelector(".response").innerHTML = "⚠️ Error reaching server.";
+        entry.querySelector(".response").innerHTML = "⚠️ Error reaching backend.";
       }
 
-      document.getElementById("prompt").value = "";
+      promptBox.value = "";
+      attachedImages = [];
+      renderImagePreviews();
+      toggleInputs(false);
     }
+
+    promptBox.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendPrompt();
+      }
+    });
+
+    fileInput.addEventListener("change", () => uploadImage(fileInput.files));
   </script>
 </body>
 </html>
