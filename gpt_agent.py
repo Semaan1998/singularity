@@ -2,19 +2,20 @@ import os
 import base64
 import logging
 import binascii
-from PIL import Image
 from io import BytesIO
+from PIL import Image
 from openai import OpenAI
 from dotenv import load_dotenv
+from typing import List, Optional, Union
 
 # ✅ Load environment variables
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# ✅ Enable logging
+# ✅ Logging setup
 logging.basicConfig(level=logging.INFO)
 
-# ✅ Default system prompt
+# ✅ Default system prompt for text
 default_system_prompt = """
 You are Singularity, a warm and helpful AI tutor with deep knowledge of science, math, and humanities.
 You explain clearly and step-by-step, using a friendly tone and numbered structure when helpful.
@@ -23,14 +24,22 @@ Your answers are optimized for clarity and usefulness, not exceeding 1000 tokens
 """
 
 def is_valid_base64(b64_string: str) -> bool:
+    """Check if a string is valid Base64."""
     try:
         base64.b64decode(b64_string, validate=True)
         return True
     except binascii.Error:
         return False
 
-# ✅ Ask Singularity (with history)
-def ask_singularity(prompt: str, model: str = "gpt-4o", history: list = None, system: str = default_system_prompt) -> str:
+def ask_singularity(
+    prompt: str,
+    model: str = "gpt-4o",
+    history: Optional[List[dict]] = None,
+    system: str = default_system_prompt
+) -> str:
+    """
+    Send a prompt to the OpenAI chat model with optional message history.
+    """
     try:
         messages = [{"role": "system", "content": system}]
         if history and isinstance(history, list):
@@ -38,10 +47,7 @@ def ask_singularity(prompt: str, model: str = "gpt-4o", history: list = None, sy
         else:
             messages.append({"role": "user", "content": prompt})
 
-        # ✅ Debug: Show what’s being sent
-        print("📤 Sending the following messages to OpenAI:")
-        for msg in messages:
-            print(f"{msg['role']}: {msg['content']}")
+        logging.info(f"🧠 Prompt sent to {model} | Tokens max: 1000")
 
         response = client.chat.completions.create(
             model=model,
@@ -55,8 +61,10 @@ def ask_singularity(prompt: str, model: str = "gpt-4o", history: list = None, sy
         logging.error(f"[Text Model Error] {e}")
         return f"[OpenAI Error using {model} for text] {str(e)}"
 
-# ✅ Combine images into one tall PNG and return base64
-def combine_images_to_base64(images: list[bytes]) -> str:
+def combine_images_to_base64(images: List[bytes]) -> str:
+    """
+    Combine multiple images vertically and return a Base64-encoded PNG.
+    """
     try:
         if not images:
             logging.warning("No images provided to combine.")
@@ -80,8 +88,15 @@ def combine_images_to_base64(images: list[bytes]) -> str:
         logging.error(f"[Image Combination Error] {e}")
         return ""
 
-# ✅ Ask Singularity with vision (with optional history)
-def ask_vision(prompt: str, images: list[bytes], model: str = "gpt-4o", history: list = None) -> str:
+def ask_vision(
+    prompt: str,
+    images: List[bytes],
+    model: str = "gpt-4o",
+    history: Optional[List[dict]] = None
+) -> str:
+    """
+    Send image(s) and a prompt to the OpenAI model using vision capabilities.
+    """
     if not images:
         return "[Vision Error] No images provided."
 
@@ -90,7 +105,7 @@ def ask_vision(prompt: str, images: list[bytes], model: str = "gpt-4o", history:
         return "[Vision Error] Invalid or empty base64 image string."
 
     try:
-        logging.info(f"[Vision Prompt] {prompt} | {len(images)} image(s)")
+        logging.info(f"🖼️ Sending vision prompt with {len(images)} image(s)")
 
         messages = [{"role": "system", "content": "You are a visual reasoning tutor AI. Describe and explain what you see."}]
         if history and isinstance(history, list):
@@ -115,4 +130,3 @@ def ask_vision(prompt: str, images: list[bytes], model: str = "gpt-4o", history:
     except Exception as e:
         logging.error(f"[Vision Model Error] {e}")
         return f"[Vision Error using {model} for image] {str(e)}"
-

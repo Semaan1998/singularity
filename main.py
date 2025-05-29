@@ -11,21 +11,24 @@ from gpt_agent import ask_singularity, ask_vision
 env_path = os.path.join(os.path.dirname(__file__), ".env")
 load_dotenv(dotenv_path=env_path)
 
-if os.getenv("OPENAI_API_KEY"):
-    print("✅ OPENAI_API_KEY loaded.")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    raise RuntimeError("❌ OPENAI_API_KEY not found in .env or environment variables.")
 else:
-    raise RuntimeError("❌ OPENAI_API_KEY not found in .env")
+    print("✅ OPENAI_API_KEY loaded.")
+
+MODEL_NAME = "gpt-4o"
 
 app = FastAPI()
 
-# ✅ Serve static files from root directory
-app.mount("/static", StaticFiles(directory="."), name="static")
+# ✅ Serve frontend from /static
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/")
 def serve_home():
-    return FileResponse("index.html")
+    return FileResponse("static/index.html")
 
-# ✅ Enable CORS
+# ✅ Enable CORS for all origins
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -37,7 +40,7 @@ app.add_middleware(
 class PromptRequest(BaseModel):
     prompt: str
 
-# ✅ In-memory conversation memory
+# ✅ In-memory conversation state
 last_exchange = {
     "user_prompt": None,
     "assistant_reply": None,
@@ -47,38 +50,42 @@ last_exchange = {
 
 @app.post("/prompt")
 async def handle_prompt(data: PromptRequest):
+    """Handle text-only prompts."""
     prompt = data.prompt.strip()
     if not prompt:
         raise HTTPException(status_code=400, detail="Prompt cannot be empty.")
 
-    # Append new user message to history
     last_exchange["history"].append({"role": "user", "content": prompt})
+    reply = ask_singularity(prompt, model=MODEL_NAME, history=last_exchange["history"])
 
-    # Ask model using full history
-    reply = ask_singularity(prompt, model="gpt-4o", history=last_exchange["history"])
+    if not reply:
+        raise HTTPException(status_code=500, detail="Model returned no response.")
 
-    # Append assistant reply to history
     last_exchange["history"].append({"role": "assistant", "content": reply})
-
     last_exchange.update({
         "user_prompt": prompt,
         "assistant_reply": reply,
         "continue_count": 0
     })
-    return {"model_used": "gpt-4o", "response": reply}
+
+    return {"model_used": MODEL_NAME, "response": reply}
 
 @app.get("/continue")
 def continue_last_reply():
+    """Continue last response up to 2 times."""
     if last_exchange["continue_count"] >= 2:
-        return {"error": "Continuation limit reached for this prompt."}
+        return {"error": "Continuation limit reached."}
     if not last_exchange["assistant_reply"]:
         return {"error": "No previous response to continue."}
 
     continuation_prompt = f"Continue from here:\n{last_exchange['assistant_reply']}"
     last_exchange["history"].append({"role": "user", "content": continuation_prompt})
-    reply = ask_singularity(continuation_prompt, model="gpt-4o", history=last_exchange["history"])
-    last_exchange["history"].append({"role": "assistant", "content": reply})
 
+    reply = ask_singularity(continuation_prompt, model=MODEL_NAME, history=last_exchange["history"])
+    if not reply:
+        raise HTTPException(status_code=500, detail="Model returned no continuation.")
+
+    last_exchange["history"].append({"role": "assistant", "content": reply})
     last_exchange["continue_count"] += 1
     last_exchange["assistant_reply"] += "\n" + reply
 
@@ -96,23 +103,24 @@ async def analyze_image(
     file2: UploadFile = File(None),
     file3: UploadFile = File(None),
 ):
+    """Analyze up to 4 uploaded images with a prompt."""
     files = [file for file in [file0, file1, file2, file3] if file is not None]
-
     if not files:
         raise HTTPException(status_code=400, detail="No image files provided.")
     if not all(file.content_type.startswith("image/") for file in files):
         raise HTTPException(status_code=400, detail="All files must be images.")
 
     image_bytes_list = [await file.read() for file in files]
-
     vision_prompt = prompt.strip() or "What do you see in these images?"
-    reply = ask_vision(prompt=vision_prompt, images=image_bytes_list, history=last_exchange["history"])
 
-    # Append vision question and reply to history
+    reply = ask_vision(prompt=vision_prompt, images=image_bytes_list, history=last_exchange["history"])
+    if not reply:
+        reply = "[Vision Error: Empty Response]"
+
     last_exchange["history"].append({"role": "user", "content": vision_prompt})
     last_exchange["history"].append({"role": "assistant", "content": reply})
 
     return {
-        "response": reply or "[Vision Error: Empty Response]",
-        "filename": "collage.png"
+        "response": reply,
+        "filename": "virtual_collage.png"
     }
